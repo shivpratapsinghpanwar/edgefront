@@ -1,0 +1,43 @@
+[project]
+name = "edgefront"
+version = "0.1.0"
+description = "Do you need a hosted decision model, or does a quantized local model match it? Measure it."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Shivpratap Singh Panwar" }]
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/shivpratapsinghpanwar/edgefront"
+
+[project.scripts]
+edgefront = "edgefront.cli:main"
+
+[project.optional-dependencies]
+jev = ["typesafe-sdk>=0.7"]
+local = ["onnxruntime>=1.17", "transformers>=4.40", "numpy>=1.24", "torch>=2.0"]
+plot = ["matplotlib>=3.8"]
+all = ["edgefront[jev,local,plot]"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/edgefront"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

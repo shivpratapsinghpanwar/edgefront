@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e '.[dev]'
+      - run: ruff check src tests
+      - run: pytest -q
+      # the whole pipeline must run with no API key, no model, no network
+      - run: |
+          edgefront bench --task synthetic --backends rules,stub \
+            --limit 40 --json bench.json
+          edgefront report bench.json --out BENCH.md
+          edgefront verify bench.json --min-acc 0.2
