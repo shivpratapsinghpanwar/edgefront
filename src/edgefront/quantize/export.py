@@ -57,6 +57,16 @@ def export_onnx(
             },
             opset_version=OPSET,
             do_constant_folding=True,
+            # Pin the legacy TorchScript-based exporter explicitly. Newer
+            # torch releases default `export()` to the "dynamo" exporter
+            # (needs `onnxscript`, and on at least one such build produced a
+            # graph that failed onnxruntime's shape inference during
+            # quantization: "Inferred shape and existing shape differ in
+            # dimension 0: (768) vs (3)"). This project's `dynamic_axes`
+            # mapping is written for the legacy exporter; asking for it
+            # explicitly keeps export behavior stable across torch versions
+            # instead of silently following wherever torch's default moves.
+            dynamo=False,
         )
     return target
 

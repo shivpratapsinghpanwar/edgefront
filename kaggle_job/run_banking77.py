@@ -38,6 +38,12 @@ def main() -> None:
     print("installing edgefront + datasets ...", flush=True)
     _pip_install(f"{EDGEFRONT_REPO}#egg=edgefront[local]")
     _pip_install("datasets")
+    # Defensive: the torch build Kaggle ships defaults torch.onnx.export()
+    # to the "dynamo" exporter, which needs onnxscript. edgefront now pins
+    # dynamo=False explicitly (see edgefront/quantize/export.py) so this
+    # should not be exercised, but installing it is cheap insurance against
+    # a future torch release routing through that path some other way.
+    _pip_install("onnxscript")
 
     from edgefront.backends.hf_local import HFLocalBackend
     from edgefront.backends.onnx_local import ONNXLocalBackend

@@ -1,6 +1,6 @@
 {
-  "id": "shivpratap0007/edgefront-banking77",
-  "title": "edgefront: banking77 local backends",
+  "id": "shivpratap0007/edgefront-banking77-local-backends",
+  "title": "edgefront-banking77-local-backends",
   "code_file": "run_banking77.py",
   "language": "python",
   "kernel_type": "script",
