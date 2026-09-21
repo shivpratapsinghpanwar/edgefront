@@ -21,6 +21,9 @@ def _humanise(label: str) -> str:
     return label.replace("_", " ").strip()
 
 
+_SOURCE_REPO = "legacy-datasets/banking77"
+
+
 def load(n: int = 500, split: str = "test", seed: int = 0) -> TaskSpec:
     try:
         from datasets import load_dataset
@@ -29,7 +32,13 @@ def load(n: int = 500, split: str = "test", seed: int = 0) -> TaskSpec:
             "banking77 needs the `datasets` package: pip install datasets"
         ) from exc
 
-    ds = load_dataset("PolyAI/banking77", split=split)
+    # PolyAI/banking77, the original upload, ships a python loading script.
+    # `datasets` >= 3.0 refuses to execute those for security reasons and
+    # raises "Dataset scripts are no longer supported" - not a transient
+    # failure, every load of that repo id now fails this way. HF's own
+    # migration of the identical rows to parquet lives at
+    # legacy-datasets/banking77; same text/label schema, no script involved.
+    ds = load_dataset(_SOURCE_REPO, split=split)
     names = ds.features["label"].names
     ds = ds.shuffle(seed=seed).select(range(min(n, len(ds))))
 
@@ -43,5 +52,5 @@ def load(n: int = 500, split: str = "test", seed: int = 0) -> TaskSpec:
         instructions="What is the customer asking about",
         criteria=criteria,
         examples=examples,
-        source=f"PolyAI/banking77 {split} split, {len(examples)} examples, seed {seed}",
+        source=f"{_SOURCE_REPO} {split} split, {len(examples)} examples, seed {seed}",
     )
