@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 from edgefront.backends.rules import RulesBackend
@@ -200,6 +201,67 @@ def test_rules_beats_chance_on_synthetic():
     task = load_task("synthetic", n=120)
     result = run_backend(RulesBackend(), task, BenchConfig(limit=120))
     assert result.accuracy > 0.25  # 4 labels, so chance is 0.25
+
+
+# ------------------------------------------------------- entailment index --
+# `typeform/distilbert-base-uncased-mnli` orders its labels ENTAILMENT,
+# NEUTRAL, CONTRADICTION - entailment is index 0, not the conventional 2 (the
+# last column). Assuming n_classes - 1 silently scores the *contradiction*
+# logit instead: accuracy still looks plausible, it is just answering the
+# opposite question. See HANDOVER.md. This must never regress unnoticed, so
+# these tests fake `transformers` in sys.modules and never touch the network
+# or download a model.
+def _install_fake_transformers(monkeypatch, id2label=None, raises=None):
+    class FakeConfig:
+        pass
+
+    config = FakeConfig()
+    if id2label is not None:
+        config.id2label = id2label
+
+    class FakeAutoConfig:
+        @staticmethod
+        def from_pretrained(name):
+            if raises is not None:
+                raise raises
+            return config
+
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.AutoConfig = FakeAutoConfig
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+
+def test_entailment_index_resolved_from_checkpoint_config(monkeypatch):
+    from edgefront.backends import onnx_local
+
+    _install_fake_transformers(
+        monkeypatch,
+        id2label={0: "ENTAILMENT", 1: "NEUTRAL", 2: "CONTRADICTION"},
+    )
+    assert onnx_local._entailment_index("typeform/distilbert-base-uncased-mnli") == 0
+
+
+def test_entailment_index_returns_none_when_config_unreachable(monkeypatch):
+    from edgefront.backends import onnx_local
+
+    _install_fake_transformers(monkeypatch, raises=OSError("no network"))
+    assert onnx_local._entailment_index("unreachable/checkpoint") is None
+
+
+def test_resolve_entail_idx_uses_the_configured_column():
+    from edgefront.backends.onnx_local import ONNXLocalBackend
+
+    backend = object.__new__(ONNXLocalBackend)
+    backend._entail_idx = 0
+    assert backend._resolve_entail_idx(n_classes=3) == 0
+
+
+def test_resolve_entail_idx_falls_back_to_last_column_when_unknown():
+    from edgefront.backends.onnx_local import ONNXLocalBackend
+
+    backend = object.__new__(ONNXLocalBackend)
+    backend._entail_idx = None
+    assert backend._resolve_entail_idx(n_classes=3) == 2
 
 
 # --------------------------------------------------------- cli exit codes ---

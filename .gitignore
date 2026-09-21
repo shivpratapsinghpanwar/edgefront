@@ -10,3 +10,4 @@ build/
 bench*.json
 BENCH.md
 .env
+models/

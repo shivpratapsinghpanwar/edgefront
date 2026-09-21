@@ -56,13 +56,25 @@ def _build_backend(spec: str) -> Backend:
         from .backends.jev import JevBackend
 
         return JevBackend()
+    if name.startswith("onnx:"):
+        # onnx:<model.onnx>:<tokenizer-id>[:precision]
+        parts = spec.split(":")
+        if len(parts) < 3:
+            raise ValueError(
+                "onnx backend needs onnx:<model.onnx>:<tokenizer-id>[:precision]"
+            )
+        from .backends.onnx_local import ONNXLocalBackend
+
+        precision = parts[3] if len(parts) > 3 else "fp32"
+        return ONNXLocalBackend(parts[1], parts[2], precision=precision)
     if name.startswith("hf:") or name == "hf":
         from .backends.hf_local import DEFAULT_MODEL, HFLocalBackend
 
         model = spec.split(":", 1)[1] if ":" in spec else DEFAULT_MODEL
         return HFLocalBackend(model)
     raise ValueError(
-        f"unknown backend: {spec}. Known: rules, stub, jev, hf[:model-id]"
+        f"unknown backend: {spec}. Known: rules, stub, jev, "
+        f"hf[:model-id], onnx:<file>:<tokenizer>[:precision]"
     )
 
 
@@ -200,7 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--backends",
         default="rules,stub",
-        help="comma separated: rules, stub, jev, hf[:model-id]",
+        help="rules, stub, jev, hf[:model-id], onnx:<file>:<tok>[:prec]",
     )
     p.add_argument("--limit", type=int, default=None, help="cap examples")
     p.add_argument("--warmup", type=int, default=3)
