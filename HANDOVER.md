@@ -14,13 +14,19 @@ Repo: https://github.com/shivpratapsinghpanwar/edgefront · MIT · CI green on 3
 
 ## What already works
 
-- `bench` / `report` / `verify` / `tasks` CLI, data-doctor house style, exit code
-  is the verdict.
+- `bench` / `report` / `verify` / `tasks` / `merge` CLI, data-doctor house
+  style, exit code is the verdict. `merge` combines result documents from
+  different machines (e.g. local backends on Kaggle, hosted locally) into one
+  document with a recomputed frontier and verdict.
 - Backends: `rules` (keyword floor), `stub` (deterministic, CI), `hf[:model-id]`
   (torch zero-shot NLI), `onnx:<file>:<tokenizer>[:precision]`, `jev` (hosted).
 - `quantize/`: HF → ONNX export and dynamic INT8. Measured on
   `typeform/distilbert-base-uncased-mnli`: **267.9 MB → 67.3 MB, 4.0× smaller**.
-- 21 tests, all offline — no API key, no model, no network.
+- 31 tests, all offline — no API key, no model, no network.
+- `kaggle_job/`: standalone script, installs edgefront from GitHub, runs
+  banking77 (77 labels) with `hf` on CUDA and `onnx` int8 on CPU. Pushed and
+  run for real on Kaggle (`shivpratap0007/edgefront-banking77-local-backends`);
+  result below.
 
 ## The measured result so far
 
@@ -57,22 +63,63 @@ scoring the *contradiction* logit, i.e. the opposite of the question. Accuracy
 read 0.167 instead of 0.417 and looked plausible.
 
 `_entailment_index()` in `backends/onnx_local.py` now reads it from the
-checkpoint config. **There is no regression test for this yet — add one.** It is
-the single most dangerous class of bug in this project: silently wrong rather
+checkpoint config, and is regression-tested (see item 1 below). It is the
+single most dangerous class of bug in this project: silently wrong rather
 than loudly wrong.
 
 ## Next, in order
 
-1. **Regression test for the entailment index.** Assert that for a checkpoint
-   whose `id2label` puts entailment at 0, the resolved index is 0. Mock the
-   config rather than downloading a model, so it stays offline.
-2. **Commit and push the current working tree** — the ONNX backend, `quantize/`,
-   the provider-default fix and the entailment fix are all uncommitted.
-3. **Update the README with the real table above**, replacing the placeholder
-   numbers. State plainly that the hosted model won and why.
-4. **The Kaggle job** (see below).
+1. ~~**Regression test for the entailment index.**~~ Done —
+   `test_entailment_index_resolved_from_checkpoint_config` and
+   `test_entailment_index_returns_none_when_config_unreachable` in
+   `tests/test_edgefront.py`, both faking `transformers` in `sys.modules` so
+   they stay offline.
+2. ~~**Commit and push the current working tree.**~~ Done, in stages; CI green
+   on every push.
+3. ~~**Update the README with the real table above.**~~ Done.
+4. ~~**The Kaggle job**~~ (see below) — done, and it ran end to end: real
+   banking77 numbers are below, not placeholders.
 5. `measure/calibration.py` reliability curve already exists in the result JSON
-   under `meta.reliability_curve` — render it in `report.py`.
+   under `meta.reliability_curve` — render it in `report.py`. Still open.
+
+### banking77 result (300 examples, test split, seed 0)
+
+The Kaggle job (`kaggle_job/run_banking77.py`) ran clean on a T4 after two
+real bugs surfaced and got fixed (see "Bugs found running the Kaggle job"
+below). Hosted (`jev`) ran locally with the API key and was merged in with
+`edgefront merge`:
+
+| backend | acc | ECE | p50 ms | p99 ms | $/1M | offline |
+|---|---:|---:|---:|---:|---:|:--:|
+| rules | 0.293 | 0.218 | 0.037 | 0.074 | 0.001 | yes |
+| distilbert-mnli-torch-cuda | 0.193 | 0.128 | 62.7 | 122 | 1.68 | yes |
+| distilbert-mnli-onnx-int8-cpu | 0.167 | 0.126 | 774 | 1721 | 20.8 | yes |
+| jev (hosted) | 0.790 | 0.108 | 391 | 556 | 57.4 | no |
+
+**Hosted leads by 59.7 points here** - a bigger gap than the 45-point gap on
+the 4-label synthetic task, exactly as predicted: local cost and latency
+scale with label count. Two things worth noting that don't fit the synthetic
+task's story:
+
+- Both local backends land *below* the keyword baseline on banking77
+  (0.193 and 0.167 vs rules' 0.293) - zero-shot NLI does badly on fine-grained
+  intents phrased close together (e.g. `card_swallowed` vs
+  `lost_or_stolen_card`), worse than matching plausible keywords.
+- On $/1M calls, local is still cheaper than hosted here (torch-cuda at
+  $1.68 vs jev's $57.4) - the local cost model amortises hardware you already
+  paid for, so at 77 labels it still looks cheap in isolation. Cost isn't the
+  argument against local here; the 59.7-point accuracy gap is.
+
+### Bugs found running the Kaggle job (fixed)
+
+- `PolyAI/banking77` ships a python loading script; `datasets>=3.0` refuses to
+  run those and raises "Dataset scripts are no longer supported" on every
+  load, not intermittently. Fixed by pointing `tasks/banking77.py` at
+  `legacy-datasets/banking77`, HF's own parquet mirror of the same rows.
+- `torch.onnx.export()` defaults to the "dynamo" exporter on the torch build
+  Kaggle ships; it needs `onnxscript` and produced a graph that failed
+  onnxruntime's shape inference during quantization. Fixed by passing
+  `dynamo=False` explicitly in `quantize/export.py`.
 
 ## The Kaggle job
 
