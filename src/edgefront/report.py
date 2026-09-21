@@ -141,10 +141,27 @@ def render_markdown(doc: dict) -> str:
 
     out.append("## Environment")
     out.append("")
-    out.append(f"- {env.get('platform', 'unknown')} / {env.get('processor', '')}")
-    out.append(f"- python {env.get('python', '?')}, run {env.get('utc_time', '?')} UTC")
-    if env.get("git_commit"):
-        out.append(f"- edgefront commit `{env['git_commit']}`")
+    environments = doc.get("environments")
+    if environments:
+        out.append(
+            f"This document merges {doc.get('merged_from', len(environments))} "
+            f"runs from different machines - backends were NOT run sequentially "
+            f"against each other, only within each source run:"
+        )
+        out.append("")
+        for e in environments:
+            out.append(
+                f"- {e.get('platform', 'unknown')} / {e.get('processor', '')}, "
+                f"python {e.get('python', '?')}, run {e.get('utc_time', '?')} UTC"
+                + (f", commit `{e['git_commit']}`" if e.get("git_commit") else "")
+            )
+    else:
+        out.append(f"- {env.get('platform', 'unknown')} / {env.get('processor', '')}")
+        out.append(
+            f"- python {env.get('python', '?')}, run {env.get('utc_time', '?')} UTC"
+        )
+        if env.get("git_commit"):
+            out.append(f"- edgefront commit `{env['git_commit']}`")
     out.append(
         "- hosted latency depends on network position; rerun locally before "
         "trusting it for your own deployment"

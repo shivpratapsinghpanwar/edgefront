@@ -15,6 +15,7 @@ from pathlib import Path
 from .bench import BenchConfig, build_document, run_backend
 from .frontier import DEFAULT_TOLERANCE_PTS, decide, pareto
 from .measure.cost import CostModel
+from .merge import MergeError, merge_documents
 from .report import render_markdown, render_table
 from .tasks import list_tasks, load_task
 from .types import Backend
@@ -154,6 +155,30 @@ def cmd_report(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_merge(args: argparse.Namespace) -> int:
+    docs = []
+    for path in args.results:
+        docs.append(json.loads(Path(path).read_text(encoding="utf-8")))
+    try:
+        merged = merge_documents(docs, tolerance_pts=args.tolerance)
+    except MergeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_BAD_USAGE
+
+    print(render_table(merged))
+    print()
+    verdict = merged["verdict"]
+    print(f"verdict: {verdict['headline']}")
+    for line in verdict["detail"]:
+        print(f"         {line}")
+
+    _write_json(merged, args.json)
+    if args.md:
+        Path(args.md).write_text(render_markdown(merged), encoding="utf-8")
+        print(f"markdown written to {args.md}")
+    return EXIT_OK
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     doc = json.loads(Path(args.results).read_text(encoding="utf-8"))
     results = doc.get("results", [])
@@ -223,6 +248,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", default=None, help="write the result document here")
     p.add_argument("--md", default=None, help="write a markdown report here")
     p.set_defaults(func=cmd_bench)
+
+    p = sub.add_parser(
+        "merge",
+        help="combine result documents from different machines into one verdict",
+    )
+    p.add_argument("results", nargs="+", help="two or more result JSON files")
+    p.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE_PTS)
+    p.add_argument("--json", default=None)
+    p.add_argument("--md", default=None)
+    p.set_defaults(func=cmd_merge)
 
     p = sub.add_parser("report", help="render a result document as markdown")
     p.add_argument("results")

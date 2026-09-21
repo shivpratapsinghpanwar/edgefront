@@ -61,8 +61,8 @@ Three things worth carrying forward honestly:
 3. **Local cost scales with label count, and it scales badly.** The local
    backend is one forward pass per label; the hosted backend is not. At
    banking77's 77 labels the local backend gets dramatically slower and more
-   expensive, not better — see the Kaggle job below, built specifically because
-   77 labels made this untenable on a laptop CPU (roughly 19 s/example).
+   expensive, not better — one example costs roughly 19 s on a laptop CPU at
+   77 labels, which is why the banking77 run needs a GPU (see `kaggle_job/`).
 
 This output is real, and it is a good example of the tool doing its job: it
 does not quietly report the model's number alone, or let a locally-run
@@ -130,9 +130,17 @@ edgefront tasks                     # list decision tasks
 edgefront bench --task synthetic --backends rules,stub --json out.json
 edgefront report out.json --out BENCH.md
 edgefront verify out.json --min-acc 0.85 --max-p99 50
+edgefront merge run_a.json run_b.json --json merged.json  # combine runs from different machines
 ```
 
 `verify` exits 1 when a threshold is missed, so it drops straight into CI.
+`merge` combines `bench` result documents produced on different machines into
+one document with a single recomputed frontier and verdict — for example, a
+local backend benchmarked on a GPU where there is no hosted-model API key,
+plus a hosted backend benchmarked wherever that key lives (see
+`kaggle_job/`). It refuses to merge documents that ran a different number of
+examples, or that both contain the same backend name, since either would make
+the resulting gap meaningless rather than just imprecise.
 
 ### Backends
 

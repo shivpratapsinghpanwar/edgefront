@@ -8,6 +8,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 from edgefront.backends.rules import RulesBackend
 from edgefront.backends.stub import StubBackend
 from edgefront.bench import BenchConfig, build_document, run_backend
@@ -296,3 +298,74 @@ def test_cli_rejects_unknown_backend(tmp_path: Path):
     root = Path(__file__).resolve().parents[1]
     proc = _run_cli("bench", "--backends", "nope", cwd=root)
     assert proc.returncode == 2
+
+
+# ------------------------------------------------------------------- merge --
+from edgefront.merge import MergeError, merge_documents  # noqa: E402
+
+
+def _doc(task_name, n_examples, backend_names, env_time="2026-01-01T00:00:00Z"):
+    return {
+        "task": {"name": task_name, "n_examples": n_examples, "labels": ["x", "y"]},
+        "environment": {"platform": "test", "utc_time": env_time},
+        "config": {"warmup": 3},
+        "duration_s": 1.0,
+        "results": [
+            {
+                "backend": name,
+                "meta": {"offline": name != "jev"},
+                "accuracy": 0.8,
+                "ece": 0.1,
+                "latency_ms": {"p50": 10.0},
+                "cost": {"usd_per_million_calls": 1.0},
+                "n_errors": 0,
+            }
+            for name in backend_names
+        ],
+    }
+
+
+def test_merge_combines_disjoint_backends():
+    a = _doc("synthetic", 40, ["rules", "onnx_int8"])
+    b = _doc("synthetic", 40, ["jev"], env_time="2026-01-02T00:00:00Z")
+    merged = merge_documents([a, b])
+    names = {r["backend"] for r in merged["results"]}
+    assert names == {"rules", "onnx_int8", "jev"}
+    assert merged["merged_from"] == 2
+    assert len(merged["environments"]) == 2
+
+
+def test_merge_rejects_mismatched_task():
+    a = _doc("synthetic", 40, ["rules"])
+    b = _doc("banking77", 40, ["jev"])
+    with pytest.raises(MergeError, match="different tasks"):
+        merge_documents([a, b])
+
+
+def test_merge_rejects_mismatched_example_count():
+    a = _doc("synthetic", 40, ["rules"])
+    b = _doc("synthetic", 60, ["jev"])
+    with pytest.raises(MergeError, match="different example counts"):
+        merge_documents([a, b])
+
+
+def test_merge_rejects_duplicate_backend_name():
+    a = _doc("synthetic", 40, ["rules"])
+    b = _doc("synthetic", 40, ["rules"])
+    with pytest.raises(MergeError, match="more than one document"):
+        merge_documents([a, b])
+
+
+def test_merge_single_document_is_passthrough():
+    a = _doc("synthetic", 40, ["rules"])
+    assert merge_documents([a]) is a
+
+
+def test_merged_report_renders_multiple_environments():
+    a = _doc("synthetic", 40, ["rules"])
+    b = _doc("synthetic", 40, ["jev"], env_time="2026-01-02T00:00:00Z")
+    merged = merge_documents([a, b])
+    md = render_markdown(merged)
+    assert "merges 2 runs from different machines" in md
+    assert "2026-01-01T00:00:00Z" in md
+    assert "2026-01-02T00:00:00Z" in md
