@@ -1,4 +1,4 @@
-# edgefront
+# edgefront JEV
 
 [![PyPI](https://img.shields.io/pypi/v/edgefront)](https://pypi.org/project/edgefront/)
 [![CI](https://github.com/shivpratapsinghpanwar/edgefront/actions/workflows/ci.yml/badge.svg)](https://github.com/shivpratapsinghpanwar/edgefront/actions/workflows/ci.yml)
