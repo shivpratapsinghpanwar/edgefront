@@ -24,8 +24,9 @@ edgefront = "edgefront.cli:main"
 [project.optional-dependencies]
 jev = ["typesafe-sdk>=0.7"]
 local = ["onnxruntime>=1.17", "transformers>=4.40", "numpy>=1.24", "torch>=2.0"]
+tasks = ["datasets>=2.14"]
 plot = ["matplotlib>=3.8"]
-all = ["edgefront[jev,local,plot]"]
+all = ["edgefront[jev,local,tasks,plot]"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]
